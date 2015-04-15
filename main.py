@@ -115,13 +115,12 @@ def tweetRandomSongLine():
             label = token[1]
             decision = random.randint(0, 2)
             # change one in three NN tokens
-            if label == "NN" and decision == 0:
+            if label == "NN" and decision == 0 and word.lower() != "thing":
                 outline = outline.replace(word, "something")
         if len(outline) < 141 and outline != original_line:
             # tweet this!
             outline = "\U0001F3B6 " + outline.strip(" /") + " \U0001F3B6"
             api.update_status(status=outline)
             tweeted = True
-
 
 tweetRandomSongLine()
