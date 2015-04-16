@@ -6,6 +6,7 @@ from nltk import pos_tag
 import random
 import tweepy
 import config
+import getHypernym
 
 def login():
     # for info on the tweepy module, see http://tweepy.readthedocs.org/en/v3.1.0/
@@ -91,7 +92,7 @@ def tweetRandomSongLine():
     """
     Do the work. Open Top Song Page, select a song, select a line from the song,
     tokenize that line, replace some occurences of NN tokens with "something"
-    (Should become more interesting in the next update!) ... and tweet the result
+    and some others with their hypernyms ... and tweet the result
     """
     songlinksLyricsFreak = getTopSongPagesFromLyricsfreak()
     songlinksMetrolyrics = getTopSongPagesFromMetrolyrics()
@@ -107,20 +108,24 @@ def tweetRandomSongLine():
             randomselection = songlinksMetrolyrics[random.randint(0, len(songlinksMetrolyrics)-1)]
             sents = readLyricsFromMetrolyrics(randomselection)
         original_line = sents[random.randint(0, len(sents)-1)]
-        outline = original_line
-        tokens = tagLyricFragment(word_tokenize(original_line.replace("/", "")))
-        #print(tokens)
-        for token in tokens:
-            word = token[0]
-            label = token[1]
-            decision = random.randint(0, 2)
-            # change one in three NN tokens
-            if label == "NN" and decision == 0 and word.lower() != "thing":
-                outline = outline.replace(word, "something")
-        if len(outline) < 141 and outline != original_line:
-            # tweet this!
-            outline = "\U0001F3B6 " + outline.strip(" /") + " \U0001F3B6"
-            api.update_status(status=outline)
-            tweeted = True
+        # make sure no much-too-long lines are processed and then thrown away
+        if len(original_line) < 200:
+            outline = original_line
+            tokens = tagLyricFragment(word_tokenize(original_line.replace("/", "")))
+            for token in tokens:
+                word = token[0]
+                label = token[1]
+                decision = random.randint(0, 2)
+                # change two in three NN tokens
+                if label == "NN" and word.lower() != "thing":
+                    if decision == 0:
+                        outline = outline.replace(" "+word+" ", " something ", 1)
+                    elif decision == 1 and getHypernym.getHypernym(word) != "":
+                        outline = outline.replace(" "+word+" ", " "+getHypernym.getHypernym(word)+" ", 1)
+            if len(outline) < 141 and outline != original_line:
+                # tweet this!
+                outline = "\U0001F3B6 " + outline.strip(" /") + " \U0001F3B6"
+                api.update_status(status=outline)
+                tweeted = True
 
 tweetRandomSongLine()
