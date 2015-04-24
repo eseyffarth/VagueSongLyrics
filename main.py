@@ -29,11 +29,15 @@ def readLyricsFromLyricsfreak(page):
     lyrics = urllib.request.urlopen(page)
     lyrics = lyrics.read()
     lyrics = lyrics.decode()
-    lyrics = lyrics.split("<!-- SONG LYRICS -->")[1].split("<!-- /SONG LYRICS -->")[0]
-    htmltag = re.compile("<[^<>]*>")
-    lyrics = re.sub(htmltag, " / ", lyrics)
-    lyrics = re.sub("\s+", " ", lyrics)
-    return sent_tokenize(lyrics)
+    try:
+        lyrics = lyrics.split("<!-- SONG LYRICS -->")[1].split("<!-- /SONG LYRICS -->")[0]
+        htmltag = re.compile("<[^<>]*>")
+        lyrics = re.sub(htmltag, " / ", lyrics)
+        lyrics = re.sub("\s+", " ", lyrics)
+        return sent_tokenize(lyrics)
+    except IndexError:
+        # unable to read the song page for some HTML reasons
+        return []
 
 def getTopSongPagesFromLyricsfreak():
     """
@@ -45,10 +49,21 @@ def getTopSongPagesFromLyricsfreak():
     songlist =  urllib.request.urlopen("http://www.lyricsfreak.com/top/")
     songlist = songlist.read()
     songlist = songlist.decode()
-    songlist = songlist.split('<tbody>')[1].split("</tbody>")[0]
-    for topsong in re.findall(linkpattern, songlist):
-        topsongs.append("http://www.lyricsfreak.com"+topsong)
-    return topsongs
+    try:
+        songlist = songlist.split('<tbody>')[1].split("</tbody>")[0]
+        for topsong in re.findall(linkpattern, songlist):
+            topsongs.append("http://www.lyricsfreak.com"+topsong)
+
+        songlist_new =  urllib.request.urlopen("http://www.lyricsfreak.com/top_new/")
+        songlist_new = songlist_new.read()
+        songlist_new = songlist_new.decode()
+        songlist_new = songlist_new.split('<tbody>')[1].split("</tbody>")[0]
+        for topsong in re.findall(linkpattern, songlist_new):
+            topsongs.append("http://www.lyricsfreak.com"+topsong)
+        return topsongs
+    except IndexError:
+        # unable to read the song list page for HTML reasons
+        return []
 
 def readLyricsFromMetrolyrics(page):
     """
@@ -57,12 +72,15 @@ def readLyricsFromMetrolyrics(page):
     lyrics = urllib.request.urlopen(page)
     lyrics = lyrics.read()
     lyrics = lyrics.decode()
-    lyrics = lyrics.split('<div id="lyrics-body-text">')[1].split("</div>")[0]
-    htmltag = re.compile("<[^<>]*>")
-    lyrics = re.sub(htmltag,  " / ", lyrics)
-    lyrics = re.sub("\s+", " ", lyrics)
-    return sent_tokenize(lyrics)
-
+    try:
+        lyrics = lyrics.split('<div id="lyrics-body-text">')[1].split("</div>")[0]
+        htmltag = re.compile("<[^<>]*>")
+        lyrics = re.sub(htmltag,  " / ", lyrics)
+        lyrics = re.sub("\s+", " ", lyrics)
+        return sent_tokenize(lyrics)
+    except IndexError:
+        # unable to read the song page for HTML reasons
+        return []
 def getTopSongPagesFromMetrolyrics():
     """
     Read list of most popular songs from http://www.metrolyrics.com/top100.html and return a list of URLs that lead to each
@@ -75,10 +93,14 @@ def getTopSongPagesFromMetrolyrics():
     songlist = songlist.read()
     songlist = songlist.decode()
 
-    songlist = songlist.split('<ul class="top20 clearfix">')[1].split('<div class="grid_4">')[0]
-    for topsong in re.findall(linkpattern, songlist):
-        topsongs.append(topsong[-1])
-    return topsongs
+    try:
+        songlist = songlist.split('<ul class="top20 clearfix">')[1].split('<div class="grid_4">')[0]
+        for topsong in re.findall(linkpattern, songlist):
+            topsongs.append(topsong[-1])
+        return topsongs
+    except IndexError:
+        # unable to read the song list page for HTML reasons
+        return []
 
 def tagLyricFragment(fragment):
     """
@@ -107,25 +129,38 @@ def tweetRandomSongLine():
         else:
             randomselection = songlinksMetrolyrics[random.randint(0, len(songlinksMetrolyrics)-1)]
             sents = readLyricsFromMetrolyrics(randomselection)
-        original_line = sents[random.randint(0, len(sents)-1)]
-        # make sure no much-too-long lines are processed and then thrown away
-        if len(original_line) < 200:
-            outline = original_line
-            tokens = tagLyricFragment(word_tokenize(original_line.replace("/", "")))
-            for token in tokens:
-                word = token[0]
-                label = token[1]
-                decision = random.randint(0, 2)
-                # change two in three NN tokens
-                if label == "NN" and word.lower() != "thing":
-                    if decision == 0:
-                        outline = outline.replace(" "+word+" ", " something ", 1)
-                    elif decision == 1 and getHypernym.getHypernym(word) != "":
-                        outline = outline.replace(" "+word+" ", " "+getHypernym.getHypernym(word)+" ", 1)
-            if len(outline) < 141 and outline != original_line:
-                # tweet this!
-                outline = "\U0001F3B6 " + outline.strip(" /") + " \U0001F3B6"
-                api.update_status(status=outline)
-                tweeted = True
+        if sents != []:
+            original_line = sents[random.randint(0, len(sents)-1)]
+            # make sure no much-too-long lines are processed and then thrown away
+            if len(original_line) < 200:
+                outline = original_line
+                tokens = tagLyricFragment(word_tokenize(original_line.replace("/", "")))
+                for token in tokens:
+                    word = token[0]
+                    label = token[1]
+                    decision = random.randint(0, 4)
+                    # change two in three NN tokens
+                    if label == "NN" and word.lower() not in ["thing", "way"]:
+                        if decision == 0:
+                            outline = outline.replace(" "+word+" ", " something ", 1)
+                        elif decision > 0 and getHypernym.getHypernym(word) != "":
+                            outline = outline.replace(" "+word+" ", " "+getHypernym.getHypernym(word)+" ", 1)
+                    elif label == "RB":
+                        # I wonder if this will be interesting: adverbs become "in some way" (adverbs are tricky)
+                        if decision < 2:
+                            outline = outline.replace(" "+word+" ", " in some way ", 1)
+                    elif label == "PRP$":
+                        # possessive pronouns become "somebody's"
+                        if decision < 3:
+                            outline = outline.replace(" "+word+" ", " somebody's ", 1)
+                    elif label == "PRP":
+                        # personal pronouns become "someone"
+                        if decision < 2:
+                            outline = outline.replace(" "+word+" ", " someone ", 1)
+                if len(outline) < 141 and outline != original_line:
+                    # tweet this!
+                    outline = "\U0001F3B6 " + outline.strip(" /") + " \U0001F3B6"
+                    api.update_status(status=outline)
+                    tweeted = True
 
 tweetRandomSongLine()
